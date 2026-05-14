@@ -201,9 +201,11 @@ class MainWindow(QMainWindow):
         
         if self.imageSource[0].isChecked():
             if self.camera.using_picam:
-                self.camera.capture_image(self.imagePath, signal_callback=self.on_capture_done)
+                self.camera.picam2.capture_file(self.imagePath)
+                self.on_capture_done()
             else:
-                if self.camera.capture_image(self.imagePath): self.displayImage(self.imagePath)
+                if self.camera.capture_image(self.imagePath): 
+                    self.displayImage(self.imagePath)
         else:
             file_dialog = QFileDialog()
             file_dialog.setFileMode(QFileDialog.ExistingFile)
@@ -213,10 +215,15 @@ class MainWindow(QMainWindow):
                 self.displayImage(self.imagePath)
 
     def on_capture_done(self, picam_signal=None):
-        time.sleep(0.5)
+        time.sleep(0.2) 
+        
         if os.path.exists(self.imagePath):
-            Image.open(self.imagePath).save(self.imagePath)
+            img = Image.open(self.imagePath)
+            img.verify() 
+            img.close()
             self.displayImage(self.imagePath)
+        else:
+            print("❌ File gambar tidak ditemukan! Cek koneksi kamera.")
 
     def displayImage(self, imagePath):
         self.raw_image = imageio.imread(imagePath)
