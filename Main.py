@@ -9,7 +9,7 @@ import pandas as pd
 import imageio
 from PIL import Image
 
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QLabel, QFileDialog, QPushButton,
     QRadioButton, QStackedWidget, QVBoxLayout, QCheckBox, QSpinBox, QLineEdit
@@ -27,6 +27,19 @@ from core.image_processing import (
 from core.feature_extraction import run_feature_extraction
 from core.machine_learning import HybridDetector
 from utils.report import PDFWithHeaderFooter
+
+class CaptureThread(QThread):
+    capture_finished = pyqtSignal(bool)
+
+    def __init__(self, camera, image_path):
+        super().__init__()
+        self.camera = camera
+        self.image_path = image_path
+
+    def run(self):
+        self.camera.picam2.capture_file(self.image_path)
+        time.sleep(0.5) 
+        self.capture_finished.emit(True)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -200,12 +213,20 @@ class MainWindow(QMainWindow):
         self.imagePath = os.path.join(self.current_raw_dir, f"raw_{self.current_patient}.jpg")
         
         if self.imageSource[0].isChecked():
+            if self.getButton:
+                self.getButton.setEnabled(False)
+                self.getButton.setText("Capturing...")
+            
             if self.camera.using_picam:
-                self.camera.picam2.capture_file(self.imagePath)
-                self.on_capture_done()
+                self.capture_thread = CaptureThread(self.camera, self.imagePath)
+                self.capture_thread.capture_finished.connect(self.on_capture_done)
+                self.capture_thread.start()
             else:
                 if self.camera.capture_image(self.imagePath): 
                     self.displayImage(self.imagePath)
+                    if self.getButton:
+                        self.getButton.setEnabled(True)
+                        self.getButton.setText("Get Image")
         else:
             file_dialog = QFileDialog()
             file_dialog.setFileMode(QFileDialog.ExistingFile)
@@ -214,16 +235,16 @@ class MainWindow(QMainWindow):
                 shutil.copy(file_dialog.selectedFiles()[0], self.imagePath)
                 self.displayImage(self.imagePath)
 
-    def on_capture_done(self, picam_signal=None):
-        time.sleep(0.2) 
-        
-        if os.path.exists(self.imagePath):
-            img = Image.open(self.imagePath)
-            img.verify() 
-            img.close()
+    def on_capture_done(self, success):
+        if self.getButton:
+            self.getButton.setEnabled(True)
+            self.getButton.setText("Get Image")
+            
+        if success and os.path.exists(self.imagePath):
             self.displayImage(self.imagePath)
+            print("✅ Gambar berhasil")
         else:
-            print("❌ File gambar tidak ditemukan! Cek koneksi kamera.")
+            print("❌ Gagal menyimpan gambar!")
 
     def displayImage(self, imagePath):
         self.raw_image = imageio.imread(imagePath)
