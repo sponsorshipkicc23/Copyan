@@ -32,7 +32,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
         ui_folder = os.path.join(self.base_dir, "ui")
-        ui_files = glob.glob(os.path.join(ui_folder, "*.ui"))
+        ui_files = glob.glob(os.path.join(self.base_dir, "**", "*.ui"), recursive=True)
 
         if len(ui_files) > 0:
             uic.loadUi(ui_files[0], self) # Load file .ui pertama yang ketemu
