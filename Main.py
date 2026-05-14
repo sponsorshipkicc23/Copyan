@@ -25,13 +25,33 @@ from core.image_processing import (
 from core.feature_extraction import run_feature_extraction
 from core.machine_learning import HybridDetector
 from utils.report import PDFWithHeaderFooter
-import resources_rc # Jika pakai Qt Resource aslimu
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         uic.loadUi("ui/Main_Program.ui", self)
+        self.base_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        logo_biomed_path = os.path.join(self.base_dir, "add-on", "BIOMED.png") # Sesuaikan nama filenya
+        if hasattr(self, 'label_15') and os.path.exists(logo_biomed_path):
+            self.label_15.setPixmap(QPixmap(logo_biomed_path).scaled(
+                self.label_15.width(), 
+                self.label_15.height(), 
+                Qt.KeepAspectRatio, 
+                Qt.SmoothTransformation
+            ))
+            self.label_15.setAlignment(Qt.AlignCenter)
 
+        logo_its_path = os.path.join(self.base_dir, "add-on", "ITS.png") 
+        if hasattr(self, 'label_16') and os.path.exists(logo_its_path):
+            self.label_16.setPixmap(QPixmap(logo_its_path).scaled(
+                self.label_16.width(), 
+                self.label_16.height(), 
+                Qt.KeepAspectRatio, 
+                Qt.SmoothTransformation
+            ))
+            self.label_16.setAlignment(Qt.AlignCenter)
+            
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
         self.master_data_dir = os.path.join(self.base_dir, "DATA_PASIEN")
         os.makedirs(self.master_data_dir, exist_ok=True)
