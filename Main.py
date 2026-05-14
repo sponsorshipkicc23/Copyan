@@ -1,5 +1,6 @@
 import sys
 import os
+import glob
 import shutil
 import numpy as np
 import cv2 as cv
@@ -29,8 +30,16 @@ from utils.report import PDFWithHeaderFooter
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        uic.loadUi("ui/Main_Program.ui", self)
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
+        ui_folder = os.path.join(self.base_dir, "ui")
+        ui_files = glob.glob(os.path.join(ui_folder, "*.ui"))
+
+        if len(ui_files) > 0:
+            uic.loadUi(ui_files[0], self) # Load file .ui pertama yang ketemu
+            print(f" Berhasil meload UI dari: {ui_files[0]}")
+        else:
+            print(f" Tidak ada file .ui sama sekali di folder {ui_folder}")
+            raise FileNotFoundError("File UI tidak ditemukan di folder 'ui'.")
         
         logo_biomed_path = os.path.join(self.base_dir, "add-on", "BIOMED.png") # Sesuaikan nama filenya
         if hasattr(self, 'label_15') and os.path.exists(logo_biomed_path):
