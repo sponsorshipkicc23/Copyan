@@ -37,66 +37,55 @@ class CaptureThread(QThread):
         self.image_path = image_path
 
     def run(self):
-        self.camera.picam2.capture_file(self.image_path)
-        time.sleep(0.5) 
-        self.capture_finished.emit(True)
+        try:
+            self.camera.picam2.capture_file(self.image_path)
+            time.sleep(0.5) 
+            self.capture_finished.emit(True)
+        except Exception as e:
+            self.capture_finished.emit(False)
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
-        ui_folder = os.path.join(self.base_dir, "ui")
+        
         ui_files = glob.glob(os.path.join(self.base_dir, "**", "*.ui"), recursive=True)
-
+        
         if len(ui_files) > 0:
             uic.loadUi(ui_files[0], self) # Load file .ui pertama yang ketemu
-            print(f" Berhasil meload UI dari: {ui_files[0]}")
         else:
-            print(f" Tidak ada file .ui sama sekali di folder {ui_folder}")
-            raise FileNotFoundError("File UI tidak ditemukan di folder 'ui'.")
-        
-        logo_biomed_path = os.path.join(self.base_dir, "add-on", "BIOMED.png") # Sesuaikan nama filenya
-        if hasattr(self, 'label_15') and os.path.exists(logo_biomed_path):
-            self.label_15.setPixmap(QPixmap(logo_biomed_path).scaled(
-                self.label_15.width(), 
-                self.label_15.height(), 
-                Qt.KeepAspectRatio, 
-                Qt.SmoothTransformation
-            ))
-            self.label_15.setAlignment(Qt.AlignCenter)
+            raise FileNotFoundError("Pastikan kamu sudah meng-upload file .ui ke GitHub dan git pull di Raspi.")
 
-        logo_its_path = os.path.join(self.base_dir, "add-on", "ITS.png") 
+        logo_malascope_path = os.path.join(self.base_dir, "add-on", "MalaScopeLogo.png")
+        if hasattr(self, 'label_15') and os.path.exists(logo_malascope_path):
+            self.label_15.setPixmap(QPixmap(logo_malascope_path).scaled(
+                self.label_15.width(), self.label_15.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+            ))
+
+        logo_its_path = os.path.join(self.base_dir, "add-on", "ITS.png")
         if hasattr(self, 'label_16') and os.path.exists(logo_its_path):
             self.label_16.setPixmap(QPixmap(logo_its_path).scaled(
-                self.label_16.width(), 
-                self.label_16.height(), 
-                Qt.KeepAspectRatio, 
-                Qt.SmoothTransformation
+                self.label_16.width(), self.label_16.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation
             ))
-            self.label_16.setAlignment(Qt.AlignCenter)
-            
-        self.base_dir = os.path.dirname(os.path.abspath(__file__))
+
         self.master_data_dir = os.path.join(self.base_dir, "DATA_PASIEN")
         os.makedirs(self.master_data_dir, exist_ok=True)
 
-        # 1. HARDWARE INIT
         self.motor = ESP32Controller()
         self.sensor = MagnificationSensor()
         self.camera = CameraSystem()
         self.ml_detector = HybridDetector()
 
-        # 2. UI HOOKS
         self.stackedWidget = self.findChild(QStackedWidget, "stackedWidget")
         self.nameInput = self.findChild(QLineEdit, "nameInput")
 
-        # Tombol Navigasi
         self.mainPage = self.findChild(QPushButton, "mainBtn")
         self.segmentPage = self.findChild(QPushButton, "rbcBtn")
         self.detectPage = self.findChild(QPushButton, "malBtn")
         self.aboutPage = self.findChild(QPushButton, "abtBtn")
         self.close_app = self.findChild(QPushButton, "closeBtn")
 
-        # UI Input & Display
         self.distVal = self.findChild(QLabel, "distVal")
         self.imageSource = [self.findChild(QRadioButton, "camInput"), self.findChild(QRadioButton, "fileInput")]
         self.getButton = self.findChild(QPushButton, "getBtn")
@@ -124,7 +113,6 @@ class MainWindow(QMainWindow):
         self.downBtn = self.findChild(QPushButton, "downBtn")
         self.stopBtn = self.findChild(QPushButton, "stopBtn")
 
-        # 3. KONEKSI SIGNAL-SLOT
         if self.spinBox: self.spinBox.setRange(1, 99999)
         if self.upBtn: self.upBtn.clicked.connect(lambda: self.motor.send_command('U', self.spinBox.value()))
         if self.downBtn: self.downBtn.clicked.connect(lambda: self.motor.send_command('D', self.spinBox.value()))
@@ -148,7 +136,6 @@ class MainWindow(QMainWindow):
 
         self.setStyles()
 
-        # 4. SETUP LAYAR KAMERA & SENSOR
         self.layout = QVBoxLayout()
         self.sensor_timer = QTimer()
         self.sensor_timer.timeout.connect(self.update_sensor_value)
@@ -161,7 +148,6 @@ class MainWindow(QMainWindow):
             if self.inputIm: self.inputIm.setLayout(self.layout)
             self.camera.start_camera()
 
-    # --- SENSOR & UI UTILS ---
     def update_sensor_value(self):
         distance = self.sensor.read_distance()
         if self.distVal:
@@ -187,23 +173,22 @@ class MainWindow(QMainWindow):
         self.current_res_dir = os.path.join(session_path, "3_results")
         for folder in [self.current_raw_dir, self.current_clust_dir, self.current_sep_dir, self.current_res_dir]: os.makedirs(folder, exist_ok=True)
 
-    # --- CAMERA INPUT ---
     def cameraInputToggled(self, checked):
         if checked:
             self.sensor_timer.start(500)
             if not self.camera.using_picam: self.webcam_timer.start(30)
-            self.inputIm.clear()
+            if self.inputIm: self.inputIm.clear()
 
     def externalFileToggled(self, checked):
         if checked:
             self.sensor_timer.stop()
             if self.distVal: self.distVal.setText("Camera is not active")
             self.webcam_timer.stop()
-            self.inputIm.clear()
+            if self.inputIm: self.inputIm.clear()
 
     def _update_frame(self):
         frame_rgb = self.camera.get_opencv_frame()
-        if frame_rgb is not None:
+        if frame_rgb is not None and self.inputIm:
             h, w, ch = frame_rgb.shape
             pixmap = QPixmap.fromImage(QImage(frame_rgb.data, w, h, ch * w, QImage.Format_RGB888))
             self.inputIm.setPixmap(pixmap.scaled(self.inputIm.width(), self.inputIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -213,11 +198,13 @@ class MainWindow(QMainWindow):
         self.imagePath = os.path.join(self.current_raw_dir, f"raw_{self.current_patient}.jpg")
         
         if self.imageSource[0].isChecked():
+            print("📸 Sedang mengambil gambar di background...")
             if self.getButton:
                 self.getButton.setEnabled(False)
                 self.getButton.setText("Capturing...")
             
             if self.camera.using_picam:
+                # Panggil Pekerja Background!
                 self.capture_thread = CaptureThread(self.camera, self.imagePath)
                 self.capture_thread.capture_finished.connect(self.on_capture_done)
                 self.capture_thread.start()
@@ -240,37 +227,60 @@ class MainWindow(QMainWindow):
             self.getButton.setEnabled(True)
             self.getButton.setText("Get Image")
             
-        if success and os.path.exists(self.imagePath):
+        if success:
+            print("✅ Thread Kamera Selesai: Berhasil")
+            time.sleep(0.3) 
             self.displayImage(self.imagePath)
-            print("✅ Gambar berhasil")
         else:
-            print("❌ Gagal menyimpan gambar!")
+            print("❌ Thread Kamera Selesai: GAGAL")
+            if self.clusterText: self.clusterText.setText("Gagal mengambil gambar dari kamera!")
 
     def displayImage(self, imagePath):
-        self.raw_image = imageio.imread(imagePath)
-        self.raw_image_rgb = cv.cvtColor(self.raw_image, cv.COLOR_BGR2RGB)
-        pixmap = QPixmap(imagePath)
-        self.inputIm.setPixmap(pixmap.scaled(self.inputIm.width(), self.inputIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        self.inputIm.setAlignment(Qt.AlignCenter)
+        if os.path.exists(imagePath) and self.inputIm:
+            pixmap = QPixmap(imagePath)
+            if pixmap.isNull():
+                print(f"❌ Gagal memuat Pixmap! File rusak: {imagePath}")
+                return
+            
+            self.raw_image = imageio.imread(imagePath)
+            self.raw_image_rgb = cv.cvtColor(self.raw_image, cv.COLOR_BGR2RGB)
+
+            print(f"🖼️ Menampilkan gambar ke QLabel: {imagePath}")
+            self.inputIm.setPixmap(pixmap.scaled(self.inputIm.width(), self.inputIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self.inputIm.setAlignment(Qt.AlignCenter)
+            self.inputIm.repaint() 
+            QApplication.processEvents() 
+        else:
+            print(f"❌ File gambar TIDAK DITEMUKAN: {imagePath}")
 
     # --- PIPELINE IMAGE PROCESSING ---
     def kmeansProcess(self):
         if not hasattr(self, 'current_clust_dir'):
-            self.clusterText.setText("Silakan Get Image dulu!")
+            if self.clusterText: self.clusterText.setText("Silakan Get Image dulu!")
             return
+            
         self.stackedWidget.setCurrentIndex(1)
-        self.clusterText.setText("Please wait, doing k-means clustering...")
+        if self.clusterText: self.clusterText.setText("Please wait, doing Reinhard Norm & k-means clustering...")
         QApplication.processEvents()
 
+        ref_path = os.path.join(self.base_dir, "add-on", "Referensi.jpg")
+        ref_image_rgb = None
+        if os.path.exists(ref_path):
+            ref_image_rgb = cv.cvtColor(cv.imread(ref_path), cv.COLOR_BGR2RGB)
+            print(f"🎨 Gambar referensi Reinhard diload dari: {ref_path}")
+        else:
+            print(f"⚠️ Gambar referensi tidak ditemukan di {ref_path}. Normalisasi Reinhard dilewati.")
+
         self.hsv_clean_image, _ = convert_hsv_circular(self.raw_image_rgb, v_thresh=20)
-        self.segmented_images, _ = kmeans_segmentation(self.hsv_clean_image, k=6, use_preprocessing=True)
+        self.segmented_images, _ = kmeans_segmentation(self.hsv_clean_image, k=6, use_preprocessing=True, ref_img_rgb=ref_image_rgb)
 
         for idx, segment_image in enumerate(self.segmented_images):
             clusterPath = os.path.join(self.current_clust_dir, f"cluster_{idx+1}.jpg")
             cv.imwrite(clusterPath, cv.cvtColor(segment_image, cv.COLOR_RGB2BGR))
             pixmap = QPixmap(clusterPath)
             self.clusterIm[idx].setPixmap(pixmap.scaled(self.clusterIm[idx].width(), self.clusterIm[idx].height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        self.clusterText.setText("k-means clustering done.")
+            
+        if self.clusterText: self.clusterText.setText("K-Means & Normalization done.")
 
     def extractCells(self):
         self.stackedWidget.setCurrentIndex(2)
@@ -285,7 +295,6 @@ class MainWindow(QMainWindow):
         edge_map, contour_edge = sobel_edge_detect(gray_img)
         cells_detected = draw_bounding_boxes(self.rbc_only_image, contour_edge)
         
-        # Ekstrak awal tanpa GMM (Sesuai kodemu)
         contours, _ = extract_contours(gray_img, edge_map)
         self.extracted_cells, self.cell_masks_list, self.bounding_boxes_sep = [], [], []
         
@@ -299,11 +308,11 @@ class MainWindow(QMainWindow):
 
         detectPath = os.path.join(self.current_res_dir, "detect_cells_initial.jpg")
         cv.imwrite(detectPath, cells_detected)
-        self.extractedIm.setPixmap(QPixmap(detectPath).scaled(self.extractedIm.width(), self.extractedIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        self.rbcValText.setText(f"{len(self.extracted_cells)} RBC detected. Click Separate Cells if overlapping.")
+        if self.extractedIm: self.extractedIm.setPixmap(QPixmap(detectPath).scaled(self.extractedIm.width(), self.extractedIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        if self.rbcValText: self.rbcValText.setText(f"{len(self.extracted_cells)} RBC detected. Click Separate Cells if overlapping.")
 
     def separateOverlap(self):
-        self.rbcValText.setText("Separating overlapping cells using BO-FRS + GMM...")
+        if self.rbcValText: self.rbcValText.setText("Separating overlapping cells using BO-FRS + GMM...")
         QApplication.processEvents()
 
         bofrs_results = bounded_opening_frs(self.filtered_mask, num_openings=3)
@@ -316,11 +325,11 @@ class MainWindow(QMainWindow):
             
         sepPath = os.path.join(self.current_res_dir, "after_sep.jpg")
         cv.imwrite(sepPath, copy_rbc)
-        self.extractedIm.setPixmap(QPixmap(sepPath).scaled(self.extractedIm.width(), self.extractedIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        self.rbcValText.setText(f"Separation completed! {len(self.extracted_cells)} individual cells detected.")
+        if self.extractedIm: self.extractedIm.setPixmap(QPixmap(sepPath).scaled(self.extractedIm.width(), self.extractedIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        if self.rbcValText: self.rbcValText.setText(f"Separation completed! {len(self.extracted_cells)} individual cells detected.")
 
     def saveExtractedCells(self):
-        self.rbcValText.setText("Saving cells and extracting features, please wait...")
+        if self.rbcValText: self.rbcValText.setText("Saving cells and extracting features, please wait...")
         QApplication.processEvents()
         
         self.cell_info = []
@@ -335,19 +344,19 @@ class MainWindow(QMainWindow):
             )
             if not self.df_features.empty:
                 self.df_features.to_excel(excel_path, index=False)
-                self.rbcValText.setText(f"{len(self.extracted_cells)} cells saved. {filter_stats['passed']} quality cells.")
+                if self.rbcValText: self.rbcValText.setText(f"{len(self.extracted_cells)} cells saved. {filter_stats['passed']} quality cells.")
             else:
-                self.rbcValText.setText("Feature extraction returned no results.")
+                if self.rbcValText: self.rbcValText.setText("Feature extraction returned no results.")
         except Exception as e:
-            self.rbcValText.setText(f"Feature extraction failed: {e}")
+            if self.rbcValText: self.rbcValText.setText(f"Feature extraction failed: {e}")
 
     def detectCells(self):
         self.stackedWidget.setCurrentIndex(3)
-        self.detectText.setText("Running detection model and feature selection...")
+        if self.detectText: self.detectText.setText("Running detection model and feature selection...")
         QApplication.processEvents()
 
         if not hasattr(self, "df_features") or self.df_features.empty:
-            self.detectText.setText("No feature data found. Please run Extract first.")
+            if self.detectText: self.detectText.setText("No feature data found. Please run Extract first.")
             return
 
         try:
@@ -361,8 +370,8 @@ class MainWindow(QMainWindow):
             self.ida_cells = ida_c
             
             summary = f"Feature Selection & Detection Complete!\nTotal cells: {self.total_cells} | IDA: {ida_c} | Normal: {norm_c}\nTop features:\n" + "\n".join(f"  {i+1}. {f}" for i, f in enumerate(top5))
-            self.detectText.setText(summary)
-            self.detectIm.setPixmap(QPixmap(res_path).scaled(self.detectIm.width(), self.detectIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            if self.detectText: self.detectText.setText(summary)
+            if self.detectIm: self.detectIm.setPixmap(QPixmap(res_path).scaled(self.detectIm.width(), self.detectIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
             
             for i in range(8): self.visualIm[i].clear()
             for i, cell_img in enumerate(self.extracted_cells[:8]):
@@ -371,7 +380,7 @@ class MainWindow(QMainWindow):
                 self.visualIm[i].setPixmap(QPixmap.fromImage(q_img).scaled(self.visualIm[i].width(), self.visualIm[i].height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
         except Exception as e:
-            self.detectText.setText(f"Detection failed: {e}")
+            if self.detectText: self.detectText.setText(f"Detection failed: {e}")
 
     def generatePDF(self):
         pdf_path = os.path.join(self.current_res_dir, f"Report_{self.current_patient}.pdf")
@@ -381,13 +390,13 @@ class MainWindow(QMainWindow):
             cells=self.total_cells, mal=self.ida_cells, parPath=self.current_sep_dir,
             output_path=pdf_path, patient_name=self.current_patient
         )
-        self.detectText.setText(f"Report generated in PDF format at {self.current_res_dir}")
+        if self.detectText: self.detectText.setText(f"Report generated in PDF format at {self.current_res_dir}")
 
     def closeEvent(self, event):
         self.motor.close()
         self.camera.close()
-        if self.webcam_timer.isActive(): self.webcam_timer.stop()
-        if self.sensor_timer.isActive(): self.sensor_timer.stop()
+        if hasattr(self, 'webcam_timer') and self.webcam_timer.isActive(): self.webcam_timer.stop()
+        if hasattr(self, 'sensor_timer') and self.sensor_timer.isActive(): self.sensor_timer.stop()
         super().closeEvent(event)
 
 if __name__ == '__main__':
