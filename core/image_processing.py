@@ -3,10 +3,8 @@ import numpy as np
 import time
 from sklearn.cluster import KMeans
 from sklearn.mixture import GaussianMixture
-from sklearn.decomposition import NMF
 from skimage.feature import peak_local_max
 
-#Preprocessing
 def convert_hsv_circular(image_rgb, v_thresh=20):
     hsv_image = cv.cvtColor(image_rgb, cv.COLOR_RGB2HSV)
     v = hsv_image[:, :, 2]
@@ -16,102 +14,29 @@ def convert_hsv_circular(image_rgb, v_thresh=20):
 def apply_median_filter(img_rgb, kernel_size=3):
     return cv.medianBlur(img_rgb, kernel_size)
 
-def rgb2od(I):
-    I = I.astype(np.float32)
-    I = np.clip(I, 1.0, 255.0)
-    return -np.log(I / 255.0)
+# --- FUNGSI REINHARD NORMALIZATION ---
+def reinhard_normalization(Source, Target, epsilon=1e-6):
+    src = cv.cvtColor(Source, cv.COLOR_RGB2LAB).astype(float)
+    tgt = cv.cvtColor(Target, cv.COLOR_RGB2LAB).astype(float)
+    result = []
 
-def od2rgb(OD):
-    I = np.exp(-OD) * 255.0
-    return np.clip(I, 0, 255).astype(np.uint8)
+    for i in range(3):
+        src_channel = src[:, :, i]
+        tgt_channel = tgt[:, :, i]
 
-def get_stain_matrix_macenko(I, beta=0.15, alpha=1.0):
-    OD = rgb2od(I).reshape((-1, 3))
-    mask = (OD.max(axis=1) > beta)
-    ODhat = OD[mask]
-    if ODhat.shape[0] < 10:
-        raise ValueError("Not enough stained pixels found. Try lowering beta or use a different method.")
-    _, _, Vt = np.linalg.svd(ODhat.T, full_matrices=False)
-    V = Vt[:2, :].T
-    projected = np.dot(ODhat, V)
-    angles = np.arctan2(projected[:, 1], projected[:, 0])
-    low, high = np.percentile(angles, [alpha, 100.0 - alpha])
-    v1 = np.dot(V, [np.cos(low), np.sin(low)])
-    v2 = np.dot(V, [np.cos(high), np.sin(high)])
-    v1 = v1 / np.linalg.norm(v1)
-    v2 = v2 / np.linalg.norm(v2)
-    W = np.vstack((v1, v2)).T
-    return W
+        src_mean, src_std = np.mean(src_channel), np.std(src_channel)
+        tgt_mean, tgt_std = np.mean(tgt_channel), np.std(tgt_channel)
 
-def get_concentrations_nnls(W, OD_flat):
-    C, _, _, _ = np.linalg.lstsq(W, OD_flat, rcond=None)
-    return np.clip(C, 0, None)
+        # Normalisasi
+        normalized = (src_channel - src_mean) * (tgt_std / (src_std + epsilon)) + tgt_mean
+        result.append(normalized)
 
-def macenko_normalize(source_rgb, target_rgb, beta=0.15, alpha=1.0):
-    Ws = get_stain_matrix_macenko(source_rgb, beta=beta, alpha=alpha)
-    Wt = get_stain_matrix_macenko(target_rgb, beta=beta, alpha=alpha)
-    h, w, _ = source_rgb.shape
-    OD_s = rgb2od(source_rgb).reshape((-1, 3)).T
-    Cs = get_concentrations_nnls(Ws, OD_s)
-    OD_t = rgb2od(target_rgb).reshape((-1, 3)).T
-    Ct = get_concentrations_nnls(Wt, OD_t)
-    maxCt = np.percentile(Ct, 99, axis=1)
-    maxCs = np.percentile(Cs, 99, axis=1)
-    scaling = (maxCt / (maxCs + 1e-8))[:, np.newaxis]
-    Cs_scaled = Cs * scaling
-    OD_norm_flat = np.dot(Wt, Cs_scaled)
-    OD_norm = OD_norm_flat.T.reshape((h, w, 3))
-    return od2rgb(OD_norm)
+    # Wajib di clip agar tidak overflow warna (titik-titik noise)
+    merged = np.clip(cv.merge(result), 0, 255).astype(np.uint8)
+    return cv.cvtColor(merged, cv.COLOR_LAB2RGB)
 
-def nmf_normalize(source_rgb, target_rgb, n_components=2):
-    h, w, _ = source_rgb.shape
-    OD_s = rgb2od(source_rgb).reshape((-1, 3))
-    OD_t = rgb2od(target_rgb).reshape((-1, 3))
-    mask_s = OD_s.max(axis=1) > 0.15
-    mask_t = OD_t.max(axis=1) > 0.15
-    OD_s_hat = OD_s[mask_s]
-    OD_t_hat = OD_t[mask_t]
-    if OD_s_hat.shape[0] < 10 or OD_t_hat.shape[0] < 10:
-        raise ValueError("Not enough stained pixels for NMF fallback.")
-    nmf_t = NMF(n_components=n_components, init='nndsvda', random_state=0, max_iter=500)
-    Ht = nmf_t.fit_transform(OD_t_hat)
-    Wt = nmf_t.components_
-    nmf_s = NMF(n_components=n_components, init='nndsvda', random_state=0, max_iter=500)
-    Hs = nmf_s.fit_transform(OD_s_hat)
-    Ws = nmf_s.components_
-    maxHt = np.percentile(Ht, 99, axis=0)
-    maxHs = np.percentile(Hs, 99, axis=0)
-    scale = (maxHt / (maxHs + 1e-8))
-    Hs_full = nmf_s.transform(OD_s)
-    Hs_scaled = Hs_full * scale
-    OD_norm = np.dot(Hs_scaled, Wt)
-    OD_norm_img = OD_norm.reshape((h, w, 3))
-    return od2rgb(OD_norm_img)
-
-def apply_macenko_normalization(img_denoised, ref_img_rgb):
-    img_macenko = None
-    last_error = None
-    for beta in (0.15, 0.10, 0.05):
-        for alpha in (1.0, 5.0, 10.0):
-            try:
-                img_macenko = macenko_normalize(img_denoised, ref_img_rgb, beta=beta, alpha=alpha)
-                last_error = None
-                break
-            except Exception as e:
-                last_error = e
-        if img_macenko is not None: break
-    if img_macenko is None:
-        try:
-            img_macenko = nmf_normalize(img_denoised, ref_img_rgb, n_components=2)
-            last_error = None
-        except Exception as e:
-            last_error = e
-    if img_macenko is None:
-        return img_denoised
-    return img_macenko
-
-def apply_clahe(img_macenko, clip_limit=2.0, tile_grid_size=(8, 8)):
-    lab = cv.cvtColor(img_macenko, cv.COLOR_RGB2LAB)
+def apply_clahe(img_rgb, clip_limit=2.0, tile_grid_size=(8, 8)):
+    lab = cv.cvtColor(img_rgb, cv.COLOR_RGB2LAB)
     L, A, B = cv.split(lab)
     clahe = cv.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
     L_cl = clahe.apply(L)
@@ -131,18 +56,26 @@ def apply_log_enhancement(img_clahe, sigma=1.5, alpha=0.5):
     return (img_sharpened * 255).astype(np.uint8)
 
 def preprocess_image(img_rgb, ref_img_rgb=None):
-    if ref_img_rgb is None: ref_img_rgb = img_rgb.copy()
+    # 1. Median Filter
     img_denoised = apply_median_filter(img_rgb, kernel_size=3)
-    img_macenko = apply_macenko_normalization(img_denoised, ref_img_rgb)
-    img_clahe = apply_clahe(img_macenko, clip_limit=2.0, tile_grid_size=(8, 8))
+    
+    # 2. Reinhard Normalization (Jika ada gambar referensi)
+    if ref_img_rgb is not None:
+        img_norm = reinhard_normalization(img_denoised, ref_img_rgb)
+    else:
+        img_norm = img_denoised
+        
+    # 3. CLAHE
+    img_clahe = apply_clahe(img_norm, clip_limit=2.0, tile_grid_size=(8, 8))
+    
+    # 4. LoG Enhancement
     img_preprocessed = apply_log_enhancement(img_clahe, sigma=1.5, alpha=0.5)
     return img_preprocessed
 
-#Segmentation    
-def kmeans_segmentation(image, k, use_preprocessing=True, v_thresh=20):
+def kmeans_segmentation(image, k, use_preprocessing=True, v_thresh=20, ref_img_rgb=None):
     if use_preprocessing:
         img_rgb = cv.cvtColor(image, cv.COLOR_HSV2RGB)
-        img_preprocessed = preprocess_image(img_rgb, ref_img_rgb=None)
+        img_preprocessed = preprocess_image(img_rgb, ref_img_rgb=ref_img_rgb)
     else:
         img_rgb = cv.cvtColor(image, cv.COLOR_HSV2RGB)
         img_preprocessed = img_rgb
@@ -164,47 +97,6 @@ def kmeans_segmentation(image, k, use_preprocessing=True, v_thresh=20):
         segmented_images.append(segmented_image)
     
     return segmented_images, labels
-
-def bounded_opening(image, num_openings=3):
-    kernel_size = 5
-    processed = image.copy()
-    for _ in range(num_openings):
-        kernel = np.ones((kernel_size, kernel_size), np.uint8)
-        processed = cv.morphologyEx(processed, cv.MORPH_OPEN, kernel)
-        kernel_size += 2
-    return processed
-
-def remove_unwanted_cells(clustered_image, selected_cluster, image):
-    if not selected_cluster: raise ValueError("No clusters selected.")
-    segmented_mask = clustered_image[selected_cluster[0]].copy()
-    for index_cluster in selected_cluster[1:]:
-        segmented_mask = cv.bitwise_or(segmented_mask, clustered_image[index_cluster])
-    
-    segmented_mask = cv.cvtColor(segmented_mask, cv.COLOR_HSV2RGB)
-    segmented_mask = cv.cvtColor(segmented_mask, cv.COLOR_RGB2GRAY)
-    _, binary_mask = cv.threshold(segmented_mask, 1, 255, cv.THRESH_BINARY)
-
-    rbc_segment = cv.bitwise_and(image, image, mask=binary_mask)
-    rbc_segment_gray = cv.cvtColor(rbc_segment, cv.COLOR_RGB2GRAY)
-
-    kernel_open = np.ones((5, 5), np.uint8)
-    kernel_close = np.ones((5, 5), np.uint8)
-    rbc_segment_gray = cv.morphologyEx(rbc_segment_gray, cv.MORPH_OPEN, kernel_open)
-    rbc_segment_gray = cv.morphologyEx(rbc_segment_gray, cv.MORPH_CLOSE, kernel_close)
-    
-    contours, _ = cv.findContours(rbc_segment_gray, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-    
-    MIN_AREA = 120
-    filtered_mask = np.zeros_like(rbc_segment_gray)
-    for contour in contours:
-        if cv.contourArea(contour) >= MIN_AREA:
-            cv.drawContours(filtered_mask, [contour], -1, 255, thickness=cv.FILLED)
-
-    rbc_only_image = cv.bitwise_and(rbc_segment, rbc_segment, mask=filtered_mask)
-    for c in range(rbc_only_image.shape[2]):
-        _, rbc_only_image[:, :, c] = cv.threshold(rbc_only_image[:, :, c], 15, 255, cv.THRESH_TOZERO)
-    
-    return rbc_only_image
 
 def remove_unwanted_cells_extended(clustered_images, selected_cluster, original_image):
     if not selected_cluster: raise ValueError("No clusters selected.")
@@ -416,40 +308,6 @@ def separate_overlapping_rbc_with_gmm(bofrs_results, cells_image):
             
     return all_cropped_cells, all_bounding_boxes, all_cell_masks
 
-def separate_cells(k, dist_transform, cell_contour_mask, cells_image, x_offset, y_offset, seed_map_cell):
-    X_mat = []
-    cropped_cell = []
-    bounding_boxes = []
-    for yc, xc in seed_map_cell:
-        X_mat.extend([(yc, xc)] * int(dist_transform[xc, yc]))
-    gmm = GaussianMixture(n_components=k, covariance_type="full", random_state=0)
-    gmm.fit(X_mat)
-    ys, xs = np.where(cell_contour_mask == 255)
-    foreground_coords = np.column_stack((xs, ys))
-    labels = gmm.predict(foreground_coords)
-    labeled_cell = np.zeros_like(cell_contour_mask, dtype=np.uint8)
-    for (x, y), label in zip(foreground_coords, labels):
-        labeled_cell[y, x] = int((label + 1))
-    unique_labels = np.unique(labeled_cell)
-    unique_labels = unique_labels[unique_labels != 0]
-    for label in unique_labels:
-        mask = np.uint8(labeled_cell == label)
-        contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-        for cnt in contours:
-            x, y, w, h = cv.boundingRect(cnt)
-            global_x = x + x_offset
-            global_y = y + y_offset
-            bounding_boxes.append((global_x, global_y, w, h))
-    for i in range(k):
-        mask = (labeled_cell == (i + 1)).astype(np.uint8)
-        indiv_cell = cv.bitwise_and(cells_image, cells_image, mask=mask)
-        coords = cv.findNonZero(mask)
-        if coords is not None:
-            x, y, w, h = cv.boundingRect(coords)
-            cropped = indiv_cell[y : y + h, x : x + w]
-            cropped_cell.append(cropped)
-    return cropped_cell, bounding_boxes
-
 def sobel_edge_detect(image):
     sobel_x = cv.Sobel(image, cv.CV_64F, 1, 0, ksize=5)
     sobel_y = cv.Sobel(image, cv.CV_64F, 0, 1, ksize=5)
@@ -471,12 +329,3 @@ def extract_contours(image, edge_map):
     contour_mask = np.zeros_like(image)
     cv.drawContours(contour_mask, contours, -1, 255, thickness=cv.FILLED)
     return contours, contour_mask
-
-def find_seed(contour_mask):
-    dist_transform = cv.distanceTransform(contour_mask, cv.DIST_L2, 5)
-    _, center_map = cv.threshold(dist_transform, 0.8 * dist_transform.max(), 255, cv.THRESH_BINARY)
-    center_map = np.uint8(center_map)
-    contours_centers, _ = cv.findContours(center_map, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-    centers = [cv.moments(c) for c in contours_centers]
-    seed_map = [(int(c["m10"] / c["m00"]), int(c["m01"] / c["m00"])) for c in centers if c["m00"] != 0]
-    return dist_transform, seed_map
