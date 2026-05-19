@@ -57,9 +57,9 @@ class MainWindow(QMainWindow):
         else:
             raise FileNotFoundError("Pastikan kamu sudah meng-upload file .ui ke GitHub dan git pull di Raspi.")
 
-        logo_malascope_path = os.path.join(self.base_dir, "add-on", "MalaScopeLogo.png")
-        if hasattr(self, 'label_15') and os.path.exists(logo_malascope_path):
-            self.label_15.setPixmap(QPixmap(logo_malascope_path).scaled(
+        logo_biomed_path = os.path.join(self.base_dir, "add-on", "BIOMED.png")
+        if hasattr(self, 'label_15') and os.path.exists(logo_biomed_path):
+            self.label_15.setPixmap(QPixmap(logo_biomed_path).scaled(
                 self.label_15.width(), self.label_15.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation
             ))
 
