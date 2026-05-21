@@ -1,48 +1,36 @@
-#include "Adafruit_VL53L0X.h"
+import time
+import board
+import busio
+import adafruit_vl53l0x
 
-Adafruit_VL53L0X lox = Adafruit_VL53L0X();
+# 1. Inisialisasi jalur komunikasi I2C di Raspberry Pi
+i2c = busio.I2C(board.SCL, board.SDA)
 
-void setup() {
-  Serial.begin(115200);
+# 2. Inisialisasi sensor VL53L0X
+try:
+    sensor = adafruit_vl53l0x.VL53L0X(i2c)
+    print("✅ Sensor VL53L0X terdeteksi. Mulai membaca data...")
+except Exception as e:
+    print(f"❌ Gagal menemukan sensor. Cek kabel SDA/SCL. Error: {e}")
+    exit()
 
-  // Tunggu Serial Monitor terbuka
-  while (! Serial) {
-    delay(1);
-  }
-  
-  Serial.println("Mulai membaca sensor VL53L0X...");
-  
-  // Inisialisasi Sensor
-  if (!lox.begin()) {
-    Serial.println("❌ Gagal mendeteksi VL53L0X! Cek kabel SDA/SCL.");
-    while(1); // Berhenti di sini kalau gagal
-  }
-}
-
-void loop() {
-  VL53L0X_RangingMeasurementData_t measure;
-  
-  // Ambil data jarak
-  lox.rangingTest(&measure, false);
-
-  if (measure.RangeStatus != 4) {  // Angka 4 artinya out of range
-    float distance = measure.RangeMilliMeter;
-    
-    // Mencegah error pembagian dengan nol
-    if (distance > 0) {
-      // Rumus Estimasi Perbesaran sesuai gambar
-      float perbesaran = 60000.0 / distance;
-      
-      // Print ke Serial Monitor
-      Serial.print("Jarak sensor: ");
-      Serial.print(distance, 2);
-      Serial.print(" mm | Estimasi perbesaran: ");
-      Serial.print(perbesaran, 1);
-      Serial.println("x");
-    }
-  } else {
-    Serial.println(" out of range ");
-  }
-    
-  delay(500); // Jeda setengah detik biar nggak terlalu ngebut
-}
+# 3. Looping untuk membaca jarak dan menghitung perbesaran
+while True:
+    try:
+        # Ambil data jarak dari sensor (dalam milimeter)
+        distance = sensor.range
+        
+        # Validasi jarak (mencegah pembagian dengan nol atau angka ngawur)
+        if 0 < distance < 1000: 
+            # Rumus kalibrasi dokumen TA kamu
+            magnification = 60000.0 / distance
+            
+            # Print hasil persis seperti format di screenshot kamu
+            print(f"Jarak sensor: {distance:.2f} mm | Estimasi perbesaran: {magnification:.1f}x")
+        else:
+            print(" out of range ")
+            
+    except Exception as e:
+        print(f"Gagal membaca data: {e}")
+        
+    time.sleep(0.5) # Jeda setengah detik biar terminal nggak nge-spam terlalu cepat
