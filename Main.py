@@ -198,13 +198,13 @@ class MainWindow(QMainWindow):
         self.imagePath = os.path.join(self.current_raw_dir, f"raw_{self.current_patient}.jpg")
         
         if self.imageSource[0].isChecked():
-            print("📸 Sedang mengambil gambar di background...")
+            self.is_primary_data = True  
+            
             if self.getButton:
                 self.getButton.setEnabled(False)
                 self.getButton.setText("Capturing...")
             
             if self.camera.using_picam:
-                # Panggil Pekerja Background!
                 self.capture_thread = CaptureThread(self.camera, self.imagePath)
                 self.capture_thread.capture_finished.connect(self.on_capture_done)
                 self.capture_thread.start()
@@ -218,8 +218,16 @@ class MainWindow(QMainWindow):
             file_dialog = QFileDialog()
             file_dialog.setFileMode(QFileDialog.ExistingFile)
             file_dialog.setNameFilter("Images (*.png *.jpg *.jpeg)")
+            
             if file_dialog.exec_():
-                shutil.copy(file_dialog.selectedFiles()[0], self.imagePath)
+                selected_file = file_dialog.selectedFiles()[0]
+                
+                if "primer" in selected_file.lower():
+                    self.is_primary_data = True
+                else:
+                    self.is_primary_data = False
+                
+                shutil.copy(selected_file, self.imagePath)
                 self.displayImage(self.imagePath)
 
     def on_capture_done(self, success):
@@ -262,13 +270,14 @@ class MainWindow(QMainWindow):
         if self.clusterText: self.clusterText.setText("Please wait, doing Reinhard Norm & k-means clustering...")
         QApplication.processEvents()
 
-        ref_path = os.path.join(self.base_dir, "source", "Referensi.jpg")
         ref_image_rgb = None
-        if os.path.exists(ref_path):
-            ref_image_rgb = cv.cvtColor(cv.imread(ref_path), cv.COLOR_BGR2RGB)
-            print(f"🎨 Gambar referensi Reinhard diload dari: {ref_path}")
-        else:
-            print(f"⚠️ Gambar referensi tidak ditemukan di {ref_path}. Normalisasi Reinhard dilewati.")
+        
+        if hasattr(self, 'is_primary_data') and not self.is_primary_data:
+            ref_path = os.path.join(self.base_dir, "source", "reference.jpg")
+            if os.path.exists(ref_path):
+                ref_image_rgb = cv.cvtColor(cv.imread(ref_path), cv.COLOR_BGR2RGB)
+            else:
+                print(f"⚠️ Gambar referensi tidak ditemukan di {ref_path}. Normalisasi Reinhard dilewati.")
 
         self.hsv_clean_image, _ = convert_hsv_circular(self.raw_image_rgb, v_thresh=20)
         self.segmented_images, _ = kmeans_segmentation(self.hsv_clean_image, k=6, use_preprocessing=True, ref_img_rgb=ref_image_rgb)
@@ -276,9 +285,12 @@ class MainWindow(QMainWindow):
         for idx, segment_image in enumerate(self.segmented_images):
             clusterPath = os.path.join(self.current_clust_dir, f"cluster_{idx+1}.jpg")
             cv.imwrite(clusterPath, cv.cvtColor(segment_image, cv.COLOR_RGB2BGR))
+            
             pixmap = QPixmap(clusterPath)
             self.clusterIm[idx].setPixmap(pixmap.scaled(self.clusterIm[idx].width(), self.clusterIm[idx].height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            
             self.clusterIm[idx].setAlignment(Qt.AlignCenter)
+            
         if self.clusterText: self.clusterText.setText("K-Means & Normalization done.")
 
     def extractCells(self):
