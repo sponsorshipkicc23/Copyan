@@ -278,7 +278,7 @@ class MainWindow(QMainWindow):
             cv.imwrite(clusterPath, cv.cvtColor(segment_image, cv.COLOR_RGB2BGR))
             pixmap = QPixmap(clusterPath)
             self.clusterIm[idx].setPixmap(pixmap.scaled(self.clusterIm[idx].width(), self.clusterIm[idx].height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            
+            self.clusterIm[idx].setAlignment(Qt.AlignCenter)
         if self.clusterText: self.clusterText.setText("K-Means & Normalization done.")
 
     def extractCells(self):
