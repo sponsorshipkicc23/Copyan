@@ -273,7 +273,7 @@ class MainWindow(QMainWindow):
         ref_image_rgb = None
         
         if hasattr(self, 'is_primary_data') and not self.is_primary_data:
-            ref_path = os.path.join(self.base_dir, "source", "reference.jpg")
+            ref_path = os.path.join(self.base_dir, "source", "Referensi.jpg")
             if os.path.exists(ref_path):
                 ref_image_rgb = cv.cvtColor(cv.imread(ref_path), cv.COLOR_BGR2RGB)
             else:
