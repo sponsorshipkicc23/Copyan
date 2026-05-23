@@ -307,9 +307,11 @@ class MainWindow(QMainWindow):
 
         detectPath = os.path.join(self.current_res_dir, "detect_cells_initial.jpg")
         cv.imwrite(detectPath, cells_detected)
-        if self.extractedIm: self.extractedIm.setPixmap(QPixmap(detectPath).scaled(self.extractedIm.width(), self.extractedIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
-           self.extractedIm.setAlignment(Qt.AlignCenter)
-        if self.rbcValText: self.rbcValText.setText(f"{len(self.extracted_cells)} RBC detected. Click Separate Cells if overlapping.")
+        if self.extractedIm: 
+            self.extractedIm.setPixmap(QPixmap(detectPath).scaled(self.extractedIm.width(), self.extractedIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self.extractedIm.setAlignment(Qt.AlignCenter)
+        if self.rbcValText: 
+            self.rbcValText.setText(f"{len(self.extracted_cells)} RBC detected. Click Separate Cells if overlapping.")
 
     def separateOverlap(self):
         if self.rbcValText: self.rbcValText.setText("Separating overlapping cells using BO-FRS + GMM...")
@@ -325,8 +327,9 @@ class MainWindow(QMainWindow):
             
         sepPath = os.path.join(self.current_res_dir, "after_sep.jpg")
         cv.imwrite(sepPath, copy_rbc)
-        if self.extractedIm: self.extractedIm.setPixmap(QPixmap(sepPath).scaled(self.extractedIm.width(), self.extractedIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
-           self.extractedIm.setAlignment(Qt.AlignCenter)
+        if self.extractedIm: 
+            self.extractedIm.setPixmap(QPixmap(sepPath).scaled(self.extractedIm.width(), self.extractedIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self.extractedIm.setAlignment(Qt.AlignCenter)
         if self.rbcValText: self.rbcValText.setText(f"Separation completed! {len(self.extracted_cells)} individual cells detected.")
 
     def saveExtractedCells(self):
@@ -345,9 +348,11 @@ class MainWindow(QMainWindow):
             )
             if not self.df_features.empty:
                 self.df_features.to_excel(excel_path, index=False)
-                if self.rbcValText: self.rbcValText.setText(f"{len(self.extracted_cells)} cells saved. {filter_stats['passed']} quality cells.")
+                if self.rbcValText: 
+                    self.rbcValText.setText(f"{len(self.extracted_cells)} cells saved. {filter_stats['passed']} quality cells.")
             else:
-                if self.rbcValText: self.rbcValText.setText("Feature extraction returned no results.")
+                if self.rbcValText: 
+                    self.rbcValText.setText("Feature extraction returned no results.")
         except Exception as e:
             if self.rbcValText: self.rbcValText.setText(f"Feature extraction failed: {e}")
 
@@ -371,9 +376,11 @@ class MainWindow(QMainWindow):
             self.ida_cells = ida_c
             
             summary = f"Feature Selection & Detection Complete!\nTotal cells: {self.total_cells} | IDA: {ida_c} | Normal: {norm_c}\nTop features:\n" + "\n".join(f"  {i+1}. {f}" for i, f in enumerate(top5))
-            if self.detectText: self.detectText.setText(summary)
-            if self.detectIm: self.detectIm.setPixmap(QPixmap(res_path).scaled(self.detectIm.width(), self.detectIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
-               self.detectIm.setAlignment(Qt.AlignCenter)
+            if self.detectText: 
+                self.detectText.setText(summary)
+            if self.detectIm: 
+                self.detectIm.setPixmap(QPixmap(res_path).scaled(self.detectIm.width(), self.detectIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                self.detectIm.setAlignment(Qt.AlignCenter)
             
             for i in range(8): self.visualIm[i].clear()
             for i, cell_img in enumerate(self.extracted_cells[:8]):
