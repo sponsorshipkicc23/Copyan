@@ -253,7 +253,6 @@ class MainWindow(QMainWindow):
         else:
             print(f"❌ File gambar TIDAK DITEMUKAN: {imagePath}")
 
-    # --- PIPELINE IMAGE PROCESSING ---
     def kmeansProcess(self):
         if not hasattr(self, 'current_clust_dir'):
             if self.clusterText: self.clusterText.setText("Silakan Get Image dulu!")
@@ -263,7 +262,7 @@ class MainWindow(QMainWindow):
         if self.clusterText: self.clusterText.setText("Please wait, doing Reinhard Norm & k-means clustering...")
         QApplication.processEvents()
 
-        ref_path = os.path.join(self.base_dir, "add-on", "Referensi.jpg")
+        ref_path = os.path.join(self.base_dir, "source", "Referensi.jpg")
         ref_image_rgb = None
         if os.path.exists(ref_path):
             ref_image_rgb = cv.cvtColor(cv.imread(ref_path), cv.COLOR_BGR2RGB)
