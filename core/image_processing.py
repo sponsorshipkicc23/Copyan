@@ -72,7 +72,7 @@ def preprocess_image(img_rgb, ref_img_rgb=None):
     img_preprocessed = apply_log_enhancement(img_clahe, sigma=1.5, alpha=0.5)
     return img_preprocessed
 
-def kmeans_segmentation(image, k, use_preprocessing=True, v_thresh=20, ref_img_rgb=None):
+def kmeans_segmentation(image, k, use_preprocessing=True, v_thresh=15, ref_img_rgb=None):
     if use_preprocessing:
         img_rgb = cv.cvtColor(image, cv.COLOR_HSV2RGB)
         img_preprocessed = preprocess_image(img_rgb, ref_img_rgb=ref_img_rgb)
