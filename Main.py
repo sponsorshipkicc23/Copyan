@@ -25,7 +25,7 @@ from core.image_processing import (
     draw_bounding_boxes, extract_contours
 )
 from core.feature_extraction import run_feature_extraction
-from core.machine_learning import HybridDetector
+from core.machine_learning import SVMDetector
 from utils.report import PDFWithHeaderFooter
 
 class CaptureThread(QThread):
@@ -75,7 +75,7 @@ class MainWindow(QMainWindow):
         self.motor = ESP32Controller()
         self.sensor = MagnificationSensor()
         self.camera = CameraSystem()
-        self.ml_detector = HybridDetector()
+        self.ml_detector = SVMDetector(self.base_dir)
 
         self.stackedWidget = self.findChild(QStackedWidget, "stackedWidget")
         self.nameInput = self.findChild(QLineEdit, "nameInput")
@@ -369,16 +369,19 @@ class MainWindow(QMainWindow):
 
     def detectCells(self):
         self.stackedWidget.setCurrentIndex(3)
-        if self.detectText: self.detectText.setText("Running detection model and feature selection...")
+        if self.detectText: 
+            self.detectText.setText("Running SVM model and feature extraction...")
         QApplication.processEvents()
 
-        if not hasattr(self, "df_features") or self.df_features.empty:
-            if self.detectText: self.detectText.setText("No feature data found. Please run Extract first.")
+        if not hasattr(self, "extracted_cells") or len(self.extracted_cells) == 0:
+            if self.detectText: 
+                self.detectText.setText("No cells extracted. Please run Extract first.")
             return
 
         try:
+            # Jalankan SVM Pipeline yang baru
             res_path, ida_c, norm_c, top5 = self.ml_detector.run_detection_pipeline(
-                self.df_features, self.extracted_cells, self.bounding_boxes_sep, 
+                self.extracted_cells, self.bounding_boxes_sep, 
                 self.raw_image_rgb, self.current_res_dir, self.current_patient
             )
             
@@ -386,17 +389,21 @@ class MainWindow(QMainWindow):
             self.total_cells = ida_c + norm_c
             self.ida_cells = ida_c
             
-            summary = f"Feature Selection & Detection Complete!\nTotal cells: {self.total_cells} | IDA: {ida_c} | Normal: {norm_c}\nTop features:\n" + "\n".join(f"  {i+1}. {f}" for i, f in enumerate(top5))
+            summary = f"SVM Classification Complete!\nTotal cells: {self.total_cells} | IDA: {ida_c} | Normal: {norm_c}\nTop Features Used:\n" + "\n".join(f"  {i+1}. {f}" for i, f in enumerate(top5))
             
-            if self.detectText: self.detectText.setText(summary)
+            if self.detectText: 
+                self.detectText.setText(summary)
             
             if self.detectIm: 
-                self.detectIm.setPixmap(QPixmap(res_path).scaled(self.detectIm.width(), self.detectIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                self.detectIm.setPixmap(QPixmap(res_path).scaled(
+                    self.detectIm.width(), self.detectIm.height(), 
+                    Qt.KeepAspectRatio, Qt.SmoothTransformation
+                ))
                 self.detectIm.setAlignment(Qt.AlignCenter)
 
         except Exception as e:
-            if self.detectText: self.detectText.setText(f"Detection failed: {e}")
-
+            if self.detectText: 
+                self.detectText.setText(f"Detection failed: {e}")
     def generatePDF(self):
         pdf_path = os.path.join(self.current_res_dir, f"Report_{self.current_patient}.pdf")
         pdf = PDFWithHeaderFooter(self.base_dir)
