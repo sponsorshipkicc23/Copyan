@@ -105,7 +105,6 @@ class MainWindow(QMainWindow):
 
         self.detectText = self.findChild(QLabel, "detectText")
         self.detectIm = self.findChild(QLabel, "detectIm")
-        self.visualIm = [self.findChild(QLabel, f"vizImage_{i}") for i in range(1, 9)]
         self.pdfGenButton = self.findChild(QPushButton, "pdfBtn")
 
         self.spinBox = self.findChild(QSpinBox, "spinBox")
@@ -388,17 +387,12 @@ class MainWindow(QMainWindow):
             self.ida_cells = ida_c
             
             summary = f"Feature Selection & Detection Complete!\nTotal cells: {self.total_cells} | IDA: {ida_c} | Normal: {norm_c}\nTop features:\n" + "\n".join(f"  {i+1}. {f}" for i, f in enumerate(top5))
-            if self.detectText: 
-                self.detectText.setText(summary)
+            
+            if self.detectText: self.detectText.setText(summary)
+            
             if self.detectIm: 
                 self.detectIm.setPixmap(QPixmap(res_path).scaled(self.detectIm.width(), self.detectIm.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
                 self.detectIm.setAlignment(Qt.AlignCenter)
-            
-            for i in range(8): self.visualIm[i].clear()
-            for i, cell_img in enumerate(self.extracted_cells[:8]):
-                h_img, w_img = cell_img.shape[:2]
-                q_img = QImage(cell_img.data, w_img, h_img, cell_img.strides[0], QImage.Format_RGB888)
-                self.visualIm[i].setPixmap(QPixmap.fromImage(q_img).scaled(self.visualIm[i].width(), self.visualIm[i].height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
         except Exception as e:
             if self.detectText: self.detectText.setText(f"Detection failed: {e}")
